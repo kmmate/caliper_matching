@@ -1,12 +1,12 @@
 //////////////////////////////////////////////////////////////////////////
 //
-// * FILE: example.c
+// * FILE: example_simulation.c
 // * DESCRIPTION:
-//    Example of using caliper matching library.
+//    Example of using caliper matching library in a Monte Carlo simulation.
 // * AUTHOR: Mate Kormos
 // * LAST REVISED: 22/nov/2022
 // * COMPILE:
-//   Mac: gcc -pthread -lgsl -l gslcblas example.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example
+//   Mac: gcc -pthread -lgsl -l gslcblas example.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simulation
 
 //
 //////////////////////////////////////////////////////////////////////////
@@ -127,11 +127,17 @@ int main(int argc, char *argv[]){
     // Caliper matching estimator
     double beta = 0.0;  // power of n in bandwidth of variance estimation; if 0, default will be used
     double alpha = 0.0; // power of n in truncation sequence in variance estimation; if 0, default will be used
+    double kappa_gamma = 0.0; // scale of bandwidth of variance estimation; if 0, default will be used
+    double kappa_a = 0.0; // scale of truncation sequence in variance estimation; if 0, default will be used
+    double kappa_gamm_derivative = 0.0; // scale of bandwidth of variance estimation for estimating derivatives w.r.t. propscore parameters; if 0, default will be used
     CMModel *cm_model = malloc(sizeof(CMModel));
     cm_model->modeltype = modeltype;
     cm_model->theta = theta0;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma_derivative = kappa_gamm_derivative;
     CMResults *cm_results = malloc(sizeof(CMResults));
     
     // Simulation

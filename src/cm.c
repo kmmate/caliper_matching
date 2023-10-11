@@ -4,7 +4,7 @@
 // * DESCRIPTION:
 //    Caliper matching library.
 // * AUTHOR: Mate Kormos
-// * LAST REVISED: 24/nov/2022
+// * LAST REVISED: 06/oct/2023
 // * COMPILE:
 //   Mac: gcc -pthread -lgsl cm.c vector.c matrix.c propscore.c -o cm
 //  * NOTE: To add new propensity score models, follow the instructions
@@ -68,7 +68,10 @@ enum CMModel_ERRORS{
     CMModel_ERROR_TREATMENTIMBALANCE,
     CMModel_ERROR_BETA,
     CMModel_ERROR_ALPHA,
-    CMModel_ERROR_BETAALPHA
+    CMModel_ERROR_BETAALPHA,
+    CMModel_ERROR_KAPPAA,
+    CMModel_ERROR_KAPPAGAMMA,
+    CMModel_ERROR_KAPPAGAMMADERIVATIVE
 };
 
 // possible errors in CMModelKnownPropscore
@@ -80,7 +83,9 @@ enum CMModelKnownPropscore_ERRORS{
     CMModelKnownPropscore_ERROR_PROPSCOREOUTOFRANGE,
     CMModelKnownPropscore_ERROR_BETA,
     CMModelKnownPropscore_ERROR_ALPHA,
-    CMModelKnownPropscore_ERROR_BETAALPHA
+    CMModelKnownPropscore_ERROR_BETAALPHA,
+    CMModelKnownPropscore_ERROR_KAPPAA,
+    CMModelKnownPropscore_ERROR_KAPPAGAMMA
 };
 
 pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -361,6 +366,13 @@ int cm_cmmodel_init_check_values(CMModel *cmm, int test_mode){
         }
         return CMModel_ERROR_THETALENGTH;
     }
+    // caliper check
+    if (cmm->delta < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: caliper `delta` must be zero to use default value, or be srictly positive; now it is %f.\n", __FILE__, __LINE__, cmm->delta);
+        }
+        return CMModel_ERROR_CALIPER;
+    }
     // treatment vector: zero/one check
     for (int i = 0; i < cmm->d->size; i++){
         if (((int)vector_short_get(cmm->d, i) != 0) && ((int)vector_short_get(cmm->d, i) != 1)){
@@ -400,6 +412,27 @@ int cm_cmmodel_init_check_values(CMModel *cmm, int test_mode){
             fprintf(stderr, "%s: line %d: CMModel input check failed: 0 < `alpha` < `beta` must be or at least one of `alpha` or `beta` must be zero; now alpha is %f, beta is %f.\n", __FILE__, __LINE__, cmm->alpha, cmm->beta);
         }
         return CMModel_ERROR_BETAALPHA;
+    }
+    // variance estimation: truncation sequence scale
+    if (cmm->kappa_a < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_a` must be; now kappa_a is %f.\n", __FILE__, __LINE__, cmm->kappa_a);
+        }
+        return CMModel_ERROR_KAPPAA;
+    }
+    // variance estimation: bandwidth sequence scale
+    if (cmm->kappa_gamma < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_gamma` must be; now kappa_gamma is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma);
+        }
+        return CMModel_ERROR_KAPPAGAMMA;
+    }
+    // variance estimation: bandwidth sequence scale for derivatives
+    if (cmm->kappa_gamma_derivative < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_gamma_derivative` must be; now kappa_gamma_derivative is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma_derivative);
+        }
+        return CMModel_ERROR_KAPPAGAMMADERIVATIVE;
     }
     // all checks passed
     return 0;
@@ -485,6 +518,27 @@ int cm_cmmodel_check_values(CMModel *cmm, int test_mode){
         }
         return CMModel_ERROR_BETAALPHA;
     }
+    // variance estimation: truncation sequence scale
+    if (cmm->kappa_a < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_a` must be; now kappa_a is %f.\n", __FILE__, __LINE__, cmm->kappa_a);
+        }
+        return CMModel_ERROR_KAPPAA;
+    }
+    // variance estimation: bandwidth sequence scale
+    if (cmm->kappa_gamma < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_gamma` must be; now kappa_gamma is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma);
+        }
+        return CMModel_ERROR_KAPPAGAMMA;
+    }
+    // variance estimation: bandwidth sequence scale for derivatives
+    if (cmm->kappa_gamma_derivative < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModel input check failed: 0 <= `kappa_gamma_derivative` must be; now kappa_gamma_derivative is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma_derivative);
+        }
+        return CMModel_ERROR_KAPPAGAMMADERIVATIVE;
+    }
     // all checks passed
     return 0;
 }
@@ -502,6 +556,9 @@ void test_cm_cmmodel_check_values(void){
     vector *theta = vector_alloc(k + 1);
     double beta = 0.0;
     double alpha = 0.0;
+    double kappa_a = 0.0;
+    double kappa_gamma = 0.0;
+    double kappa_gamma_derivative = 0.0;
     // test 1
     vector *y = vector_alloc(n + 1);
     vector_short *d = vector_short_alloc(n);
@@ -514,6 +571,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -531,6 +591,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -548,6 +611,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -573,6 +639,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -599,6 +668,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(theta);
@@ -612,6 +684,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -637,6 +712,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -664,6 +742,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_short_free(d);
@@ -678,6 +759,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_short_free(d);
@@ -695,6 +779,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -724,6 +811,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 2: beta too large
@@ -747,6 +837,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -772,6 +865,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 2: alpha too large
@@ -795,6 +891,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -820,6 +919,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -844,6 +946,9 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -868,8 +973,186 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
+
+    // Variance estimation: truncation sequence scale
+    // test 1: scale is negative
+    err_code = CMModel_ERROR_KAPPAA;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = -1.0;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+    // test 2: no error for kappa_a = 0
+    err_code = 0;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = 0.0;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+
+    // Variance estimation: bandwidth sequence scale
+    // test 1: kappa_gamma is negative
+    err_code = CMModel_ERROR_KAPPAGAMMA;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = 1.0;
+    kappa_gamma = -1.3;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+    // test 2: no error for kappa_gamma = 0
+    err_code = 0;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = 0.0;
+    kappa_gamma = 0.0;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+
+    // Variance estimation: bandwidth sequence scale for derivative
+    // test 1: kappa_gamma_derivative is negative
+    err_code = CMModel_ERROR_KAPPAGAMMADERIVATIVE;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = 1.0;
+    kappa_gamma = 1.3;
+    kappa_gamma_derivative = -4.5;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+    // test 2: no error for kappa_gamma_derivative = 0
+    err_code = 0;
+    n = 10;
+    k = 2;
+    delta = 0.1;
+    modeltype = "probit";
+    theta = vector_alloc(k + 1);
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    x = matrix_alloc(n, k);
+    beta = 0.2;
+    alpha = 0.1;
+    kappa_a = 0.0;
+    kappa_gamma = 0.0;
+    kappa_gamma_derivative = 0.0;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    ret_code = cm_cmmodel_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+
 
     // All checks pass
     err_code = 0;
@@ -884,6 +1167,7 @@ void test_cm_cmmodel_check_values(void){
     x = matrix_alloc(n, k);
     beta = 0.2;
     alpha = 0.1;
+    kappa_a = 0.01;
     cm_model->y = y;
     cm_model->d = d;
     cm_model->x = x;
@@ -892,6 +1176,7 @@ void test_cm_cmmodel_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
     ret_code = cm_cmmodel_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -906,11 +1191,18 @@ void test_cm_cmmodel_check_values(void){
 int cm_cmmodelknownpropscore_init_check_values(CMModelKnownPropscore *cmm, int test_mode){
     // if test_mode==1, cm_cm_input_check does not print error messages, only returns error code
     // data dimension check
-    if (!((cmm->d->size == cmm->y->size) && (cmm->d->size == cmm->n) && (cmm->y->size == cmm->propscore->size))){
+    if (!((cmm->d->size == cmm->y->size) && (cmm->y->size == cmm->propscore->size))){
         if (!test_mode){
             fprintf(stderr, "%s: line %d: CMModelKnownPropscore input check failed: input check failed: dimension mismatch between `y`, `d`, `propscore` or length unequal to `n`.\n", __FILE__, __LINE__);
         }
         return CMModelKnownPropscore_ERROR_DIMENSIONMISMATCH;
+    }
+    // caliper check
+    if (cmm->delta < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModelKnownPropscore input check failed: caliper `delta` must be zero to use default value, or be srictly positive; now it is %f.\n", __FILE__, __LINE__, cmm->delta);
+        }
+        return CMModelKnownPropscore_ERROR_CALIPER;
     }
     // treatment vector: zero/one check
     for (int i = 0; i < cmm->d->size; i++){
@@ -962,6 +1254,20 @@ int cm_cmmodelknownpropscore_init_check_values(CMModelKnownPropscore *cmm, int t
             fprintf(stderr, "%s: line %d:  CMModelKnownPropscore input check failed: 0 < `alpha` < `beta` must be or at least one of `alpha` or `beta` must be zero; now alpha is %f, beta is %f.\n", __FILE__, __LINE__, cmm->alpha, cmm->beta);
         }
         return CMModelKnownPropscore_ERROR_BETAALPHA;
+    }
+    // variance estimation: truncation sequence scale
+    if (cmm->kappa_a < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModelKnwonPropscore input check failed: 0 <= `kappa_a` must be; now kappa_a is %f.\n", __FILE__, __LINE__, cmm->kappa_a);
+        }
+        return CMModelKnownPropscore_ERROR_KAPPAA;
+    }
+    // variance estimation: bandwidth sequence scale
+    if (cmm->kappa_gamma < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModelKnwonPropscore input check failed: 0 <= `kappa_gamma` must be; now kappa_gamma is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma);
+        }
+        return CMModelKnownPropscore_ERROR_KAPPAGAMMA;
     }
     // all checks passed
     return 0;
@@ -1036,6 +1342,20 @@ int cm_cmmodelknownpropscore_check_values(CMModelKnownPropscore *cmm, int test_m
         }
         return CMModelKnownPropscore_ERROR_BETAALPHA;
     }
+    // variance estimation: truncation sequence scale
+    if (cmm->kappa_a < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModelKnwonPropscore input check failed: 0 <= `kappa_a` must be; now kappa_a is %f.\n", __FILE__, __LINE__, cmm->kappa_a);
+        }
+        return CMModelKnownPropscore_ERROR_KAPPAA;
+    }
+    // variance estimation: bandwidth sequence scale
+    if (cmm->kappa_gamma < 0){
+        if (!test_mode){
+            fprintf(stderr, "%s: line %d: CMModelKnownPropscore input check failed: 0 <= `kappa_gamma` must be; now kappa_gamma is %f.\n", __FILE__, __LINE__, cmm->kappa_gamma);
+        }
+        return CMModelKnownPropscore_ERROR_KAPPAGAMMA;
+    }
     // all checks passed
     return 0;
 }
@@ -1047,9 +1367,11 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     int ret_code;
     int err_code = CMModelKnownPropscore_ERROR_DIMENSIONMISMATCH;
     int n = 10;
-    double delta = 0.1;
-    double beta = 0.0;
-    double alpha = 0.0;
+    double delta = 0.1; // default value that should not cause errors
+    double beta = 0.0;  // default value that should not cause errors
+    double alpha = 0.0;  // default value that should not cause errors
+    double kappa_a = 0.0;  // default value that should not cause errors
+    double kappa_gamma = 0.0;  // default value that should not cause errors
     // test 1
     vector *y = vector_alloc(n + 1);
     vector_short *d = vector_short_alloc(n);
@@ -1061,6 +1383,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -1076,6 +1400,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -1091,6 +1417,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -1110,6 +1438,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     // printf("ret_code = %d.\n", ret_code);
     assert(ret_code == err_code);
@@ -1133,6 +1463,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_short_free(d);
@@ -1145,6 +1477,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_short_free(d);
@@ -1160,6 +1494,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -1183,6 +1519,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(propscore);
@@ -1195,6 +1533,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(propscore);
@@ -1207,6 +1547,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(propscore);
@@ -1219,6 +1561,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(propscore);
@@ -1244,6 +1588,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 2: beta too large
@@ -1256,6 +1602,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -1280,6 +1628,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 2: alpha too large
@@ -1292,6 +1642,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
 
@@ -1316,6 +1668,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 2: no error for beta=0
@@ -1328,6 +1682,8 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     // test 3: no error for alpha=0
@@ -1340,8 +1696,117 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
+
+    // Variance estimation: truncation sequence scale
+    // test 1: kappa_a is negative
+    err_code = CMModelKnownPropscore_ERROR_KAPPAA;
+    n = 10;
+    delta = 0.1;
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    propscore = vector_alloc(n);
+    for (int i = 0; i < n; i++){
+        vector_set(propscore, i, 0.1);
+    }
+    beta = 0.1;
+    alpha = 0;
+    kappa_a = -2.0;   
+    cm_model->n = n;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->propscore = propscore;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+    // test 2: no error for kappa_a = 0
+    err_code = 0;
+    n = 10;
+    delta = 0.1;
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    propscore = vector_alloc(n);
+    for (int i = 0; i < n; i++){
+        vector_set(propscore, i, 0.1);
+    }
+    beta = 0.1;
+    alpha = 0; 
+    kappa_a = 0.0;  
+    cm_model->n = n;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->propscore = propscore;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+
+    // Variance estimation: bandwidth sequence scale
+    // test 1: kappa_a is negative
+    err_code = CMModelKnownPropscore_ERROR_KAPPAGAMMA;
+    n = 10;
+    delta = 0.1;
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    propscore = vector_alloc(n);
+    for (int i = 0; i < n; i++){
+        vector_set(propscore, i, 0.1);
+    }
+    beta = 0.1;
+    alpha = 0;
+    kappa_a = 0.0;
+    kappa_gamma = -3.14;   
+    cm_model->n = n;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->propscore = propscore;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+    // test 2: no error for kappa_a = 0
+    err_code = 0;
+    n = 10;
+    delta = 0.1;
+    y = vector_alloc(n);
+    d = vector_short_calloc(n);
+    vector_short_set(d, 0, 1);
+    propscore = vector_alloc(n);
+    for (int i = 0; i < n; i++){
+        vector_set(propscore, i, 0.1);
+    }
+    beta = 0.1;
+    alpha = 0; 
+    kappa_a = 0.0;  
+    kappa_gamma = 0.0;
+    cm_model->n = n;
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->propscore = propscore;
+    cm_model->delta = delta;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma = kappa_gamma;
+    ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
+    assert(ret_code == err_code);
+
 
     // All checks pass
     err_code = 0;
@@ -1356,6 +1821,7 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     }
     beta = 0.2;
     alpha = 0.1;
+    kappa_a = 0.01;
     cm_model->n = n;
     cm_model->y = y;
     cm_model->d = d;
@@ -1363,6 +1829,7 @@ void test_cm_cmmodelknownpropscore_check_values(void){
     cm_model->delta = delta;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
+    cm_model->kappa_a = kappa_a;
     ret_code = cm_cmmodelknownpropscore_check_values(cm_model, test_mode);
     assert(ret_code == err_code);
     vector_free(y);
@@ -1598,7 +2065,9 @@ void cm_matches(CMModelKnownPropscore *cm_model, CMResults *results){
         int result_code;
         pthread_t threads[NUM_THREADS];
         for (long t = 0; t < NUM_THREADS; t++){
-            printf("`cm_matches`: creating thread %ld.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_matches`: creating thread %ld.\n", t);
+            }
             // arguments to threads
             thread_args[t].threadid = t;
             thread_args[t].cm_model = cm_model;
@@ -1608,14 +2077,18 @@ void cm_matches(CMModelKnownPropscore *cm_model, CMResults *results){
             thread_args[t].match_indices = match_indices;
             thread_args[t].matches = matches;
             result_code = pthread_create(&threads[t], NULL, cm_matches_thread, (void *)&thread_args[t]);
-            printf("`cm_matches`: thread %ld pscore_sortindex_high is %zu.\n", t, thread_args[t].pscore_sortindex_high);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_matches`: thread %ld pscore_sortindex_high is %zu.\n", t, thread_args[t].pscore_sortindex_high);
+            }
             assert(!result_code);
         }
         // wait for threads to finish
         for (long t = 0; t < NUM_THREADS; t++){
             result_code = pthread_join(threads[t], NULL);
             assert(!result_code);
-            printf("`cm_matches`: thread %ld has finished.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_matches`: thread %ld has finished.\n", t);
+            }
         }
     } else { // single thread version
         CMThreadArgumentsMatches *thread_args = malloc(sizeof(CMThreadArgumentsMatches));
@@ -2203,7 +2676,9 @@ void cm_te_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         int result_code;
         // creating threads
         for (long t = 0; t < NUM_THREADS; t++){
-            printf("`cm_te_estimator`: creating thread %ld.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_te_estimator`: creating thread %ld.\n", t);
+            }
             thread_args[t].cm_model = cm_model;
             thread_args[t].results = results;
             thread_args[t].n_treated = n_treated;
@@ -2211,7 +2686,9 @@ void cm_te_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
             thread_args[t].index_high = (t == NUM_THREADS - 1 ? n : (t + 1) * obs_per_thread);
             thread_args[t].ate_hat = &ate_hat;
             thread_args[t].att_hat = &att_hat;
-            printf("`cm_te_estimator`: thread %ld index_high is %zu.\n", t, thread_args[t].index_high);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_te_estimator`: thread %ld index_high is %zu.\n", t, thread_args[t].index_high);
+            }
             result_code = pthread_create(&threads[t], NULL, cm_te_estimator_thread, (void *)&thread_args[t]);
             assert(!result_code);
         }
@@ -2219,7 +2696,9 @@ void cm_te_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         for (long t = 0; t < NUM_THREADS; t++){
             result_code = pthread_join(threads[t], NULL);
             assert(!result_code);
-            printf("`cm_te_estimator`: thread %ld has finished.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_te_estimator`: thread %ld has finished.\n", t);
+            }
         }
     } else { // single thread
         CMThreadArgumentsTE *thread_args = malloc(sizeof(CMThreadArgumentsTE));
@@ -2614,7 +3093,7 @@ void test_cm_update_fisher_info(void){
 
 // Update q's in the third variance component: adds i-th term to `q_d0, q_d0_treated, q_d1, q_d1_treated`.
 // On output, the factor (1/p1_hat) is included in q_d0_treated and q_d1_treated.
-int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vector *q_d1_treated, CMModelKnownPropscore *cm_model, double p1_hat, double gamma_n, double *h_d, double *qmu_d){
+int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vector *q_d1_treated, CMModelKnownPropscore *cm_model, double p1_hat, double gamma_n, double gamma_derivative_n, double *h_d, double *qmu_d){
     // link function and its derivative for appropriate propscore model
     size_t n = cm_model->d->size;
     double (*g)(double);
@@ -2679,7 +3158,7 @@ int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vec
         if (j < q_d0->size - 1){ // non-intercepts
             x_ij = matrix_get(cm_model->_x, i, j);
             vector_view x_j = matrix_column(cm_model->_x, j); // j'th covariate for all observations
-            // ---- (deriv h_d / deriv theta_j):   ((g^{-1})'(propscore_i)/(n*gamma_n^2))sum_{j:D_j=d} X_{jk} * K'((singleindex_score_j-singleindex_score_i)/gamma_n)
+            // ---- (deriv h_d / deriv theta_j):   ((g^{-1})'(propscore_i)/(n*gamma_derivative_n^2))sum_{j:D_j=d} X_{jk} * K'((singleindex_score_j-singleindex_score_i)/gamma_derivative_n)
             h_d_deriv_thetaj = nonpara_qk_deriv_eval_filter(vector_get(cm_model->_singleindex_score, i),
                                                             cm_model->_singleindex_score->data,
                                                             cm_model->_singleindex_score->size,
@@ -2689,12 +3168,12 @@ int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vec
                                                             (&x_j.vector)->stride,
                                                             1,  // exponent
                                                             nonpara_kernelderiv_gauss,
-                                                            gamma_n,
+                                                            gamma_derivative_n,
                                                             -g_inv_deriv(vector_get(cm_model->propscore, i)), // scale
                                                             0,
                                                             (void *)cm_model->d,
                                                             cm_kernel_filter_func);
-            // ---- (deriv qmu_d / deriv theta_j):   ((g^{-1})'(propscore_i)/(n*gamma_n^2))sum_{j:D_j=d} X_{jk} * Y_j * K'((singleindex_score_j-singleindex_score_i)/gamma_n)
+            // ---- (deriv qmu_d / deriv theta_j):   ((g^{-1})'(propscore_i)/(n*gamma_derivative_n^2))sum_{j:D_j=d} X_{jk} * Y_j * K'((singleindex_score_j-singleindex_score_i)/gamma_derivative_n)
             qmu_d_deriv_thetaj = nonpara_qk_deriv_weighted_eval_filter(vector_get(cm_model->_singleindex_score, i),
                                                                        cm_model->_singleindex_score->data,
                                                                        cm_model->_singleindex_score->size,
@@ -2707,25 +3186,25 @@ int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vec
                                                                        (&x_j.vector)->stride,
                                                                        1,   // exponent
                                                                        nonpara_kernelderiv_gauss,
-                                                                       gamma_n,
+                                                                       gamma_derivative_n,
                                                                        -g_inv_deriv(vector_get(cm_model->propscore, i)), // scale
                                                                        0,
                                                                        (void *)cm_model->d,
                                                                        cm_kernel_filter_func);
         } else { // intercept
             x_ij = 1;
-            // ---- (deriv h_d / deriv theta_{k+1}):   ((g^{-1})'(propscore_i)/(n*gamma_n^2))sum_{j:D_j=d} K'((singleindex_score_j-singleindex_score_i)/gamma_n)
+            // ---- (deriv h_d / deriv theta_{k+1}):   ((g^{-1})'(propscore_i)/(n*gamma_derivative_n^2))sum_{j:D_j=d} K'((singleindex_score_j-singleindex_score_i)/gamma_derivative_n)
             h_d_deriv_thetaj = nonpara_h_deriv_eval_filter(vector_get(cm_model->_singleindex_score, i),
                                                            cm_model->_singleindex_score->data,
                                                            cm_model->_singleindex_score->size,
                                                            cm_model->_singleindex_score->stride,
                                                            nonpara_kernelderiv_gauss,
-                                                           gamma_n,
+                                                           gamma_derivative_n,
                                                            -g_inv_deriv(vector_get(cm_model->propscore, i)),
                                                            0,
                                                            (void *)cm_model->d,
                                                            cm_kernel_filter_func);
-            // ---- (deriv qmu_d / deriv theta_{k+1}):   ((g^{-1})'(propscore_i)/(n*gamma_n^2))sum_{j:D_j=d} Y_j * K'((singleindex_score_j-singleindex_score_i)/gamma_n)
+            // ---- (deriv qmu_d / deriv theta_{k+1}):   ((g^{-1})'(propscore_i)/(n*gamma_derivative_n^2))sum_{j:D_j=d} Y_j * K'((singleindex_score_j-singleindex_score_i)/gamma_derivative_n)
             qmu_d_deriv_thetaj = nonpara_qk_deriv_eval_filter(vector_get(cm_model->_singleindex_score, i),
                                                               cm_model->_singleindex_score->data,
                                                               cm_model->_singleindex_score->size,
@@ -2735,7 +3214,7 @@ int cm_update_qs(size_t i, vector *q_d0, vector *q_d0_treated, vector *q_d1, vec
                                                               cm_model->y->stride,
                                                               1,    // exponent
                                                               nonpara_kernelderiv_gauss,
-                                                              gamma_n,
+                                                              gamma_derivative_n,
                                                               -g_inv_deriv(vector_get(cm_model->propscore, i)), // scale
                                                               0,
                                                               (void *)cm_model->d,
@@ -2775,8 +3254,9 @@ void test_cm_update_qs(void){
     size_t n, i, k, j;
     n = 4;
     k = 2;
-    double score, gamma_n;
+    double score, gamma_n, gamma_derivative_n;
     gamma_n = pow(n, -1.0/5);
+    gamma_derivative_n = 0.1 * pow(n, -1.0/5);
     double y_i, score_i, propscore_i, x_ij;
     short d_i;
     vector *y = vector_alloc(n);
@@ -2807,7 +3287,7 @@ void test_cm_update_qs(void){
     matrix_set(x, 3, 0, 1.3);   matrix_set(x, 3, 1, 2.8);
     double p1_hat = vector_short_mean(d);
     // score and propscore for observations
-    for (int j=0; j<4; j++){
+    for (int j=0; j<n; j++){
         // score for observation j
         score = vector_get(theta, k) + vector_get(theta, 0) * matrix_get(x, j, 0) + vector_get(theta, 1) * matrix_get(x, j, 1);
         vector_set(singleindex_score, j, score);
@@ -2867,14 +3347,14 @@ void test_cm_update_qs(void){
         x_ij = matrix_get(x, i, j);
         deriv_p[0] = mu_d_deriv_p[0] * g_deriv(score_i) * x_ij;
         deriv_p[1] = mu_d_deriv_p[1] * g_deriv(score_i) * x_ij;
-        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                            matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                            matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 0) * matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                vector_get(y, 1) * matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 2) * matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                vector_get(y, 3) * matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));    
+        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                            matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                            matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 0) * matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                vector_get(y, 1) * matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 2) * matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                vector_get(y, 3) * matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));    
         mu_d_deriv_thetaj[0] = (qmu_d_deriv_thetaj[0] * h_d[0] - qmu_d[0] * h_d_deriv_thetaj[0]) / (n * pow(h_d[0], 2));
         mu_d_deriv_thetaj[1] = (qmu_d_deriv_thetaj[1] * h_d[1] - qmu_d[1] * h_d_deriv_thetaj[1]) / (n * pow(h_d[1], 2));
         // printf("TEST: h_d_deriv_thetaj[0] = %f; h_d_deriv_thetaj[1] = %f.\n", h_d_deriv_thetaj[0], h_d_deriv_thetaj[1]);
@@ -2895,14 +3375,14 @@ void test_cm_update_qs(void){
         x_ij = matrix_get(x, i, j);
         deriv_p[0] = mu_d_deriv_p[0] * g_deriv(score_i) * x_ij;
         deriv_p[1] = mu_d_deriv_p[1] * g_deriv(score_i) * x_ij;
-        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                            matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                            matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 0) * matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                vector_get(y, 1) * matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 2) * matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                vector_get(y, 3) * matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));    
+        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                            matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                            matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 0) * matrix_get(x, 0, j) * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                vector_get(y, 1) * matrix_get(x, 1, j) * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 2) * matrix_get(x, 2, j) * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                vector_get(y, 3) * matrix_get(x, 3, j) * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));    
         mu_d_deriv_thetaj[0] = (qmu_d_deriv_thetaj[0] * h_d[0] - qmu_d[0] * h_d_deriv_thetaj[0]) / (n * pow(h_d[0], 2));
         mu_d_deriv_thetaj[1] = (qmu_d_deriv_thetaj[1] * h_d[1] - qmu_d[1] * h_d_deriv_thetaj[1]) / (n * pow(h_d[1], 2));
         // printf("TEST: h_d_deriv_thetaj[0] = %f; h_d_deriv_thetaj[1] = %f.\n", h_d_deriv_thetaj[0], h_d_deriv_thetaj[1]);
@@ -2923,14 +3403,14 @@ void test_cm_update_qs(void){
         x_ij = 1;
         deriv_p[0] = mu_d_deriv_p[0] * g_deriv(score_i) * x_ij;
         deriv_p[1] = mu_d_deriv_p[1] * g_deriv(score_i) * x_ij;
-        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (1.0 * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                1.0 * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (1.0 * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                1.0 * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 0) * 1.0 * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                    vector_get(y, 1) * 1.0 * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_n));
-        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_n, 2))) * (vector_get(y, 2) * 1.0 * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_n) + // controls have index 0,1
-                                                                                    vector_get(y, 3) * 1.0 * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_n));    
+        h_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (1.0 * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                1.0 * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        h_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (1.0 * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                1.0 * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[0] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 0) * 1.0 * kernel_deriv((vector_get(singleindex_score, 0) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                    vector_get(y, 1) * 1.0 * kernel_deriv((vector_get(singleindex_score, 1) - score_i) / gamma_derivative_n));
+        qmu_d_deriv_thetaj[1] = (g_invderiv(propscore_i) / (n * pow(gamma_derivative_n, 2))) * (vector_get(y, 2) * 1.0 * kernel_deriv((vector_get(singleindex_score, 2) - score_i) / gamma_derivative_n) + // controls have index 0,1
+                                                                                    vector_get(y, 3) * 1.0 * kernel_deriv((vector_get(singleindex_score, 3) - score_i) / gamma_derivative_n));    
         mu_d_deriv_thetaj[0] = (qmu_d_deriv_thetaj[0] * h_d[0] - qmu_d[0] * h_d_deriv_thetaj[0]) / (n * pow(h_d[0], 2));
         mu_d_deriv_thetaj[1] = (qmu_d_deriv_thetaj[1] * h_d[1] - qmu_d[1] * h_d_deriv_thetaj[1]) / (n * pow(h_d[1], 2));
         // printf("TEST: h_d_deriv_thetaj[0] = %f; h_d_deriv_thetaj[1] = %f.\n", h_d_deriv_thetaj[0], h_d_deriv_thetaj[1]);
@@ -2947,7 +3427,7 @@ void test_cm_update_qs(void){
         vector_set(q_d0_treated, j, vector_get(q_d0_treated, j) + update_q0_treated);
         vector_set(q_d1_treated, j, vector_get(q_d1_treated, j) + update_q1_treated);
         // values from function
-        cm_update_qs(i, result_q_d0, result_q_d0_treated, result_q_d1, result_q_d1_treated, cm_model, p1_hat, gamma_n, h_d, qmu_d);
+        cm_update_qs(i, result_q_d0, result_q_d0_treated, result_q_d1, result_q_d1_treated, cm_model, p1_hat, gamma_n, gamma_derivative_n, h_d, qmu_d);
         // for (int l=0; l<k+1; l++){
         //     printf("q_d0[%d] = %f, result_q_d0[%d] = %f \n", l, vector_get(q_d0, l), l, vector_get(result_q_d0, l));
         //     printf("q_d0_treated[%d] = %f, result_q_d0_treated[%d] = %f \n", l, vector_get(q_d0_treated, l), l, vector_get(result_q_d0_treated, l));
@@ -2992,7 +3472,7 @@ typedef struct CMThreadArgumentsVAR {
 void *cm_variance_estimator_thread(void *thread_arguments){
     CMThreadArgumentsVAR *thread_args = (CMThreadArgumentsVAR *)thread_arguments;
     size_t n = thread_args->cm_model->d->size;
-    int k = thread_args->cm_model->_x->size2; // nr. of covarites without intercept
+    int k = thread_args->cm_model->_called_internally ? thread_args->cm_model->_x->size2 : 0; // nr. of covarites without intercept
     double p1_hat = thread_args->p1_hat; // sample proportion of treated
     // variance component contributions
     double var_tau, var_tau_treated, var_sigmapi, var_sigmapi_treated, var_estpi, var_estpi_treated;
@@ -3013,29 +3493,52 @@ void *cm_variance_estimator_thread(void *thread_arguments){
     double truncation_low, truncation_high;
     double pscore_min, pscore_max;
     double npower_a;
-    double kappa_a = pow(10.0, -10);
-    if (thread_args->cm_model->alpha == 0.0) { // if zero exponent is supplied, use dfault value
-        npower_a = 1/4.000000002; //1.0 / 5.5;
+    double kappa_a;
+    if (thread_args->cm_model->alpha == 0.0) { // if zero exponent is supplied, use default value
+        npower_a = 1/4.000000002; // default value //1.0 / 5.5;
     } else {
         npower_a = thread_args->cm_model->alpha;
+    }
+    if (thread_args->cm_model->kappa_a == 0.0){ // if zero scale is supplied, use default value
+        kappa_a = pow(10.0, -15); // default value
+    } else {
+        kappa_a = thread_args->cm_model->kappa_a;
     }
     double a_n = kappa_a * pow((double)n, -npower_a); // trunction sequence
     pscore_min = vector_get(thread_args->cm_model->propscore, thread_args->cm_model->_pscore_sortindex[0]);
     pscore_max = vector_get(thread_args->cm_model->propscore, thread_args->cm_model->_pscore_sortindex[n - 1]);
-    printf("pscore_min = %f, pscore_max = %f.\n", pscore_min, pscore_max);
+    if (CM_VERBOSE_MODE){
+        printf("pscore_min = %f, pscore_max = %f.\n", pscore_min, pscore_max);
+    }
     truncation_low = pscore_min + a_n;
     truncation_high = pscore_max - a_n;
     // bandwidth
     double npower_gamma;
-    double kappa_gamma = 0.5;
-    if (thread_args->cm_model->beta == 0.0){ // if zero exponent is supplied, use dfault value
-        npower_gamma = 1/4.000000001; //1.0 / 5;
+    double kappa_gamma;
+    if (thread_args->cm_model->beta == 0.0){ // if zero exponent is supplied, use default value
+        npower_gamma = 1/4.000000001; // default value //1.0 / 5; 
     } else {
         npower_gamma = thread_args->cm_model->beta;
     }
+    if (thread_args->cm_model->kappa_gamma == 0.0){  //if zero scale is supplied, use default value
+        kappa_gamma = 0.5; // default value
+    } else {
+        kappa_gamma = thread_args->cm_model->kappa_gamma;
+    }
     assert((npower_a < npower_gamma) && (0 < npower_a) && (0 < npower_gamma) && (npower_gamma < 1.0 / 4)); // sanity check
-    double gamma_n = kappa_gamma * pow((double)n, -npower_gamma);                                                  // bandwidth sequence
-    printf("a_n = %.35f, gamma_n = %.35f.\n", a_n, gamma_n);
+    double gamma_n = kappa_gamma * pow((double)n, -npower_gamma);  // bandwidth sequence
+    // bandwidth for derivative estimation used in var_estpi 
+    double kappa_gamma_derivative;
+    double gamma_derivative_n = 0.0;
+    if (thread_args->cm_model->_called_internally){  // var_estpi, hence derivatives, estimated too
+        if (thread_args->cm_model->_kappa_gamma_derivative == 0.0){ // if zero scale is supplied, use default value
+            kappa_gamma_derivative = 0.5; // default value
+        } else {
+            kappa_gamma_derivative = thread_args->cm_model->_kappa_gamma_derivative;
+        }
+        //scale may be different, but same power `npower_gamma` of n is used
+        gamma_derivative_n = kappa_gamma_derivative * pow((double)n, -npower_gamma); // bandwidth sequence for derivatives
+    }
     // process observations assigned to the thread
     for (size_t i = thread_args->index_low; i < thread_args->index_high; i++){
         // only compute nonparametric estimates for propensity score that are not truncated
@@ -3105,7 +3608,7 @@ void *cm_variance_estimator_thread(void *thread_arguments){
             var_sigmapi_treated += pow(vector_get(thread_args->cm_model->propscore, i), 2) * sigma2_d[0] / (n * pow(p1_hat, 2) * (1 - vector_get(thread_args->cm_model->propscore, i))) + vector_get(thread_args->cm_model->propscore, i) * sigma2_d[1] / (n * pow(p1_hat, 2));
             // printf("var_sigmapi = %f, var_sigmapi_treated = %f\n", var_sigmapi, var_sigmapi_treated);
             if (thread_args->cm_model->_called_internally){ // compute variance contribution for estimated propscore
-                cm_update_qs(i, q_d0, q_d0_treated, q_d1, q_d1_treated, thread_args->cm_model, p1_hat, gamma_n, h_d, qmu_d);
+                cm_update_qs(i, q_d0, q_d0_treated, q_d1, q_d1_treated, thread_args->cm_model, p1_hat, gamma_n, gamma_derivative_n, h_d, qmu_d);
             }
             // cleanup
             free(qmu_d);
@@ -3121,6 +3624,19 @@ void *cm_variance_estimator_thread(void *thread_arguments){
     }
     // merge in results
     pthread_mutex_lock(&mutex_lock);
+    // truncation and bandwidth sequences
+    thread_args->results->kappa_a = kappa_a;
+    thread_args->results->kappa_gamma = kappa_gamma;
+    thread_args->results->kappa_gamma_derivative = kappa_gamma_derivative;
+    thread_args->results->alpha = npower_a;
+    thread_args->results->beta = npower_gamma;
+    thread_args->results->a_n = a_n;
+    thread_args->results->gamma_n = gamma_n;
+    thread_args->results->gamma_derivative_n = gamma_derivative_n;  // zero if propscore is knonw
+    thread_args->results->propscore_min = pscore_min;
+    thread_args->results->propscore_max = pscore_max;
+    thread_args->results->truncation_low = truncation_low;
+    thread_args->results->truncation_high = truncation_high;
     // variance components
     // printf("*(thread_args->var_tau) before = %f\n", *(thread_args->var_tau));
     *(thread_args->var_tau) += var_tau;
@@ -3143,13 +3659,15 @@ void *cm_variance_estimator_thread(void *thread_arguments){
         vector_add(thread_args->q_d1, q_d1);
         vector_add(thread_args->q_d0_treated, q_d0_treated);
         vector_add(thread_args->q_d1_treated, q_d1_treated);
-    }
-    printf("AFTER:\n");
-    for (int j = 0; j < thread_args->cm_model->_theta->size; j++){
-        printf("thread_args->q_d0[%d] = %f\n", j, vector_get(thread_args->q_d0, j));
-        printf("thread_args->q_d1[%d] = %f\n", j, vector_get(thread_args->q_d1, j));
-        printf("thread_args->q_d0_treated[%d] = %f\n", j, vector_get(thread_args->q_d0_treated, j));
-        printf("thread_args->q_d1_treated[%d] = %f\n", j, vector_get(thread_args->q_d1_treated, j));
+        if (CM_VERBOSE_MODE){    
+            printf("AFTER:\n");
+            for (int j = 0; j < thread_args->cm_model->_theta->size; j++){
+                printf("thread_args->q_d0[%d] = %f\n", j, vector_get(thread_args->q_d0, j));
+                printf("thread_args->q_d1[%d] = %f\n", j, vector_get(thread_args->q_d1, j));
+                printf("thread_args->q_d0_treated[%d] = %f\n", j, vector_get(thread_args->q_d0_treated, j));
+                printf("thread_args->q_d1_treated[%d] = %f\n", j, vector_get(thread_args->q_d1_treated, j));
+            }
+        }
     }
     pthread_mutex_unlock(&mutex_lock);
     void *ptr;
@@ -3159,7 +3677,7 @@ void *cm_variance_estimator_thread(void *thread_arguments){
 // Estimates asymptotic variance variance of matching estimator
 void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
     size_t n = cm_model->d->size;
-    size_t k = cm_model->_x->size2;
+    size_t k = cm_model->_called_internally ? cm_model->_x->size2 : 0;
     double var_tau, var_tau_treated, var_sigmapi, var_sigmapi_treated;
     var_tau = var_tau_treated = var_sigmapi = var_sigmapi_treated = 0;
     double p1_hat = vector_short_mean(cm_model->d);
@@ -3181,7 +3699,9 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         pthread_t threads[NUM_THREADS];
         CMThreadArgumentsVAR thread_args[NUM_THREADS];
         for (long t = 0; t < NUM_THREADS; t++){
-            printf("`cm_variance_estimator`: creating thread %ld.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_variance_estimator`: creating thread %ld.\n", t);
+            }
             thread_args[t].threadid = t;
             thread_args[t].cm_model = cm_model;
             thread_args[t].results = results;
@@ -3197,7 +3717,9 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
             thread_args[t].q_d0_treated = q_d0_treated;
             thread_args[t].q_d1_treated = q_d1_treated;
             thread_args[t].fisher_info = fisher_info;
-            printf("`cm_variance_estimator`: thread %ld index_high is %zu.\n", t, thread_args[t].index_high);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_variance_estimator`: thread %ld index_high is %zu.\n", t, thread_args[t].index_high);
+            }
             result_code = pthread_create(&threads[t], NULL, cm_variance_estimator_thread, (void *)&thread_args[t]);
             assert(!result_code);
         }
@@ -3205,7 +3727,9 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         for (long t = 0; t < NUM_THREADS; t++){
             result_code = pthread_join(threads[t], NULL);
             assert(!result_code);
-            printf("`cm_variance_estimator`: thread %ld has finished.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_variance_estimator`: thread %ld has finished.\n", t);
+            }
         }
     } else { // single thread
         CMThreadArgumentsVAR *thread_args = malloc(sizeof(CMThreadArgumentsVAR));
@@ -3226,21 +3750,27 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         cm_variance_estimator_thread((void *)thread_args);
     }
     // adjust var_tau and var_tau_treated for values not dealt with by threads
-    printf("var_tau_treated after = %f\n", var_tau_treated);
+    if (CM_VERBOSE_MODE){
+        printf("var_tau_treated after = %f\n", var_tau_treated);
+    }
     var_tau -= pow(results->ate_hat, 2);
     var_tau_treated -= pow(results->att_hat, 2) / p1_hat;
-    printf("var_tau_treated after after = %f\n", var_tau_treated);
-    printf("results->att_hat = %f\n", results->att_hat);
-    printf("pow(results->att_hat, 2) = %f\n", pow(results->att_hat, 2));
-    printf("p1_hat = %f\n", p1_hat);
-    printf("var_tau after after = %f\n", var_tau);
+    if (CM_VERBOSE_MODE){
+        printf("var_tau_treated after after = %f\n", var_tau_treated);
+        printf("results->att_hat = %f\n", results->att_hat);
+        printf("pow(results->att_hat, 2) = %f\n", pow(results->att_hat, 2));
+        printf("p1_hat = %f\n", p1_hat);
+        printf("var_tau after after = %f\n", var_tau);
+    }
     // compute third variance component coming from propscore estimation
     double var_estpi = 0;
     double var_estpi_treated = 0;
     if (cm_model->_called_internally){ // estimated propscore
-        for (int j = 0; j < cm_model->_theta->size; j++){
-            for (int l = 0; l < cm_model->_theta->size; l++){
-                printf("fisher_info[%d,%d] = %f\n", j, l, matrix_get(fisher_info, j, l));
+        if (CM_VERBOSE_MODE){
+            for (int j = 0; j < cm_model->_theta->size; j++){
+                for (int l = 0; l < cm_model->_theta->size; l++){
+                    printf("fisher_info[%d,%d] = %f\n", j, l, matrix_get(fisher_info, j, l));
+                }
             }
         }
         double *v_estpi = cm_compute_var_estpi(q_d0, q_d0_treated, q_d1, q_d1_treated, fisher_info);  // in-place modifies q's and fisher_info!
@@ -3335,7 +3865,9 @@ double cm_maxmin_delta(vector_short *d, vector *propscore, size_t *pscore_sortin
         pthread_t threads[NUM_THREADS];
         CMThreadArgumentsMaxmin thread_args[NUM_THREADS];
         for (long t = 0; t < NUM_THREADS; t++){
-            printf("`cm_maxmin_delta`: creating thread %ld.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_maxmin_delta`: creating thread %ld.\n", t);
+            }
             thread_args[t].threadid = t;
             thread_args[t].d = d;
             thread_args[t].propscore = propscore;
@@ -3343,7 +3875,9 @@ double cm_maxmin_delta(vector_short *d, vector *propscore, size_t *pscore_sortin
             thread_args[t].maxmins = maxmins;
             thread_args[t].sortindex_low = t * obs_per_thread;
             thread_args[t].sortindex_high = (t == NUM_THREADS - 1 ? n : (t + 1) * obs_per_thread);
-            printf("`cm_maxmin_delta`: thread %ld sortindex_high is %zu.\n", t, thread_args[t].sortindex_high);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_maxmin_delta`: thread %ld sortindex_high is %zu.\n", t, thread_args[t].sortindex_high);
+            }
             result_code = pthread_create(&threads[t], NULL, cm_maxmin_delta_thread, (void *)&thread_args[t]);
             assert(!result_code);
         }
@@ -3351,7 +3885,9 @@ double cm_maxmin_delta(vector_short *d, vector *propscore, size_t *pscore_sortin
         for (long t = 0; t < NUM_THREADS; t++){
             result_code = pthread_join(threads[t], NULL);
             assert(!result_code);
-            printf("`cm_maxmin_delta`: thread %ld has finished.\n", t);
+            if (CM_VERBOSE_MODE){
+                printf("`cm_maxmin_delta`: thread %ld has finished.\n", t);
+            }
         }
     } else {    // single-threaded version
         CMThreadArgumentsMaxmin *thread_args = malloc(sizeof(CMThreadArgumentsMaxmin));
@@ -3523,7 +4059,7 @@ void test_cm_maxmin_delta(void){
 
 
 
-// Sets caliper
+// Sets caliper. Only to be called by the user, not internally.
 int cm_initialise_known_propscore(CMModelKnownPropscore *cm_model){
     // validate inputs
     if (cm_cmmodelknownpropscore_init_check_values(cm_model, 0)){
@@ -3534,11 +4070,22 @@ int cm_initialise_known_propscore(CMModelKnownPropscore *cm_model){
     // sort propensity score
     size_t *pscore_sortindex = vector_sort_index(cm_model->propscore);
     // set caliper
-    double delta = log(n) / n;
+    size_t n1 = vector_short_sum(cm_model->d);
+    size_t n0 = n - n1;
+    double max_groups = cm_d_max(log(n1 + 0.0) / n1, log(n0 + 0.0) / n0);
+    // double delta = cm_maxmin_delta(cm_model->d, propscore, pscore_sortindex);
+    double delta = 0.0;
+    if (cm_model->delta == 0.0){
+        delta = cm_d_max(max_groups, cm_maxmin_delta(cm_model->d, cm_model->propscore, pscore_sortindex));
+    } else {
+        delta = cm_model->delta;
+    }     
     // write to model
     cm_model->n = n;
     cm_model->_pscore_sortindex = pscore_sortindex;
+    cm_model->delta = delta;
     // instantiation successfull
+    cm_model->_called_internally = 0;
     cm_model->_isinstantiated = 1;
     return 0;
 }
@@ -3550,10 +4097,11 @@ CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cm_model){
     };
     // ensure model has been instantiated
     if (!cm_model->_isinstantiated){
-        fprintf(stderr, "%s: line %d: CMModelKnownPropscore has not been instantiated prior to calling `cm_cm`.\n", __FILE__, __LINE__);
+        fprintf(stderr, "%s: line %d: CMModelKnownPropscore has not been instantiated prior to calling `cm_cm_known_propscore`. Do so with `cm_initialise_known_propscore`.\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     CMResults *results = malloc(sizeof(CMResults));
+    results->delta = cm_model->delta;  // write caliper to results too
     // estimates
     cm_matches(cm_model, results);
     // some sanity checks
@@ -3591,9 +4139,14 @@ int cm_initialise(CMModel *cm_model){
     // set caliper
     size_t n1 = vector_short_sum(cm_model->d);
     size_t n0 = n - n1;
-    double max_groups = cm_d_max(log(n1 + 0.0) / n1, log(n0 + 0.0) / n0);
+    double max_groups = cm_d_max(log(n1 + 0.0) / (n1 + 1.0), log(n0 + 0.0) / (n0 + 1.0));
     // double delta = cm_maxmin_delta(cm_model->d, propscore, pscore_sortindex);
-    double delta = cm_d_max(max_groups, cm_maxmin_delta(cm_model->d, propscore, pscore_sortindex));
+    double delta = 0.0;
+    if (cm_model->delta == 0.0){
+        delta = cm_d_max(max_groups, cm_maxmin_delta(cm_model->d, propscore, pscore_sortindex));
+    } else {
+        delta = cm_model->delta;
+    }   
     // double delta = 10 * log(n) / n;
     // load values to the model
     cm_model->n = n;
@@ -3611,7 +4164,7 @@ int cm_initialise(CMModel *cm_model){
 CMResults *cm_cm(CMModel *cm_model){
     // ensure model has been instantiated
     if (!cm_model->_isinstantiated){
-        fprintf(stderr, "%s: line %d: CMModel has not been instantiated prior to calling `cm_cm`.\n", __FILE__, __LINE__);
+        fprintf(stderr, "%s: line %d: CMModel has not been instantiated prior to calling `cm_cm`. Do so with `cm_initialise`.\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     // validate inputs
@@ -3626,6 +4179,9 @@ CMResults *cm_cm(CMModel *cm_model){
     cm_known->modeltype = cm_model->modeltype;
     cm_known->alpha = cm_model->alpha;
     cm_known->beta = cm_model->beta;
+    cm_known->kappa_a = cm_model->kappa_a;
+    cm_known->kappa_gamma = cm_model->kappa_gamma;
+    cm_known->_kappa_gamma_derivative = cm_model->kappa_gamma_derivative;
     cm_known->_x = cm_model->x;
     cm_known->_theta = cm_model->theta;
     cm_known->_modeltype_index = cm_model->_modeltype_index;

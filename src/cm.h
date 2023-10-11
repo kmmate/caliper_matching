@@ -26,6 +26,7 @@
 // variables
 #define NUM_THREADS  8
 #define CM_TEST_DOUBLE_TOLERANCE_NPOWER 10
+#define CM_VERBOSE_MODE 0  // printing for debugging
 extern const int cm_number_of_modeltypes;
 
  // structs
@@ -48,7 +49,20 @@ typedef struct CMResults {
     size_t n;
     char *modeltype; // propensity score modeltype
     vector *theta_hat;  // propensity score (estimated) parameter
-    double caliper;
+    double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
+    // fields related to nonparametric variance estimation
+    double a_n; // value of truncation sequence in nonparametric variance estimation. Equal to `kappa_a` * `n` ^ `alpha`.
+    double gamma_n; // value of bandwidth in nonparametric variance estimation. Equal to `kappa_gamma` * `n` ^ `beta`.
+    double gamma_derivative_n; // value of bandwidth in nonparametric variance estimation used in derivative estimation w.r.t. propensity score parameters; it is zero when the propensity score is known. Equal to `kappa_gamma_derivative` * `n` ^ `beta`.
+    double beta;  // negative-exponent of bandwidth in nonparametric variance estimation that is actually used. If zero was passed, it is the default value, otherwise it is equal to the passed value.
+    double alpha;  // negative-exponent of truncation sequence in nonparametric variance estimation that is actually used. If zero was passed, it is the default value, otherwise it is equal to the passed value.
+    double kappa_gamma;  // scale of bandwidth sequence in nonparametric variance estimation that is actually used. If zero was passed, it is the default value, otherwise it is equal to the passed value.
+    double kappa_a;  // scale of truncation sequence in nonparametric variance estimation that is actually used. If zero was passed, it is the default value, otherwise it is equal to the passed value.
+    double kappa_gamma_derivative;  // negative-exponent of truncation sequence in nonparametric variance estimation that is actually used. If zero was passed, it is the default value (which is zero for known propensity scores), otherwise it is equal to the passed value.
+    double propscore_min; // the smallest propensity score value
+    double propscore_max; // the largest propensity score value
+    double truncation_low; // lower threshold for variance estimation = `propscore_min`+`a_n`
+    double truncation_high; // higher threshold for variance estimation = `propscore_max` - `a_n`
 } CMResults;
 
 typedef struct CMModel {
@@ -58,9 +72,12 @@ typedef struct CMModel {
     matrix *x;  // design matrix
     char *modeltype;    // propensity score model type
     vector *theta;  // propensity score model parameter, of length  (number of columns in `x`)+1
-    double delta;  // caliper
+    double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
     double beta;    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
     double alpha;   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+    double kappa_a; // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+    double kappa_gamma; // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
+    double kappa_gamma_derivative; // scale parameter of bandwidth in nonparametric variance estimation estimating derivatives w.r.t. theta. If zero is passed, a default value is used. 
     // Following fields are for internal use. Any user-provided values will be overwritten.
     int _isinstantiated;    // indicates whether the model has been instantiated.
     int _modeltype_index;  // index of propensity score model type. Optional; supplied internally
@@ -76,9 +93,11 @@ typedef struct CMModelKnownPropscore {
     vector_short *d;  // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise
     vector *propscore;  // vector of propensity score values
     char *modeltype;    // propensity score model type
-    double delta;  // caliper
+    double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
     double beta;    // negative exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
     double alpha;   // negative exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+    double kappa_a; // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+    double kappa_gamma; // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
     // Following fields are for internal use. Any user-provided values will be overwritten.
     matrix *_x;  // covariate matrix. Optional; supplied internally
     int _modeltype_index;  // index of propensity score model type. Optional; supplied internally
@@ -87,11 +106,14 @@ typedef struct CMModelKnownPropscore {
     vector *_theta;     // propensity score parameter. Optional; supplied internally
     int _called_internally;  // optional; overwritten internally if need be
     int _isinstantiated;    // indicates whether the model has been instantiated.
+    double _kappa_gamma_derivative; // scale parameter of bandwidth in nonparametric variance estimation estimating derivatives w.r.t. theta. If zero is passed, a default value is used. 
 } CMModelKnownPropscore;
 
 // functions
 int cm_initialise(CMModel *cmmodel);
 CMResults *cm_cm(CMModel *cmmodel);
+int cm_initialise_known_propscore(CMModelKnownPropscore *cmmodel);
+CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cmmodel);
 
 
 // tests
