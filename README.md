@@ -57,7 +57,7 @@ Illustration of the main steps in the workflow. For a working example, refer to 
 
 - On a Mac, `example_simple.c` can be compiled by
         
-        $ gcc -pthread -lgsl -l gslcblas example.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simple
+        $ gcc -pthread -lgsl -l gslcblas example_simple.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simple
 
 and then run the binary as
         

@@ -4,9 +4,9 @@
 // * DESCRIPTION:
 //    Simple example of using caliper matching library.
 // * AUTHOR: Mate Kormos
-// * LAST REVISED: 02/oct/2023
+// * LAST REVISED: 13/oct/2023
 // * COMPILE:
-//   Mac: gcc -pthread -lgsl -l gslcblas example.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simple
+//   Mac: gcc -pthread -lgsl -l gslcblas example_simple.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simple
 
 //
 //////////////////////////////////////////////////////////////////////////
