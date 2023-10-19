@@ -4,9 +4,9 @@
 // * DESCRIPTION:
 //    Example of using caliper matching library in a Monte Carlo simulation.
 // * AUTHOR: Mate Kormos
-// * LAST REVISED: 22/nov/2022
+// * LAST REVISED: 13/nov/2023
 // * COMPILE:
-//   Mac: gcc -pthread -lgsl -l gslcblas example.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simulation
+//   Mac: gcc -pthread -lgsl -l gslcblas example_simulation.c cm.c vector.c matrix.c dynamicarray.c linkedlist.c propscore.c nonpara.c linalg.c -o example_simulation
 
 //
 //////////////////////////////////////////////////////////////////////////

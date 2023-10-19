@@ -4176,12 +4176,12 @@ CMResults *cm_cm(CMModel *cm_model){
     cm_known->n = cm_model->n;
     cm_known->y = cm_model->y;
     cm_known->d = cm_model->d;
-    cm_known->modeltype = cm_model->modeltype;
     cm_known->alpha = cm_model->alpha;
     cm_known->beta = cm_model->beta;
     cm_known->kappa_a = cm_model->kappa_a;
     cm_known->kappa_gamma = cm_model->kappa_gamma;
     cm_known->_kappa_gamma_derivative = cm_model->kappa_gamma_derivative;
+    cm_known->_modeltype = cm_model->modeltype;
     cm_known->_x = cm_model->x;
     cm_known->_theta = cm_model->theta;
     cm_known->_modeltype_index = cm_model->_modeltype_index;

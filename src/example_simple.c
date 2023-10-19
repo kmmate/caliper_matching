@@ -165,7 +165,6 @@ int main(int argc, char *argv[]){
     // -- Case-KnownPS
     CMModelKnownPropscore *cm_model_known_propscore = malloc(sizeof(CMModelKnownPropscore)); // Case-KnownPS
     cm_model_known_propscore->delta = delta;
-    cm_model_known_propscore->modeltype = modeltype;
     cm_model_known_propscore->beta = beta;
     cm_model_known_propscore->alpha = alpha;
     cm_model_known_propscore->kappa_gamma = kappa_gamma;

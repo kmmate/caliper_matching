@@ -92,13 +92,13 @@ typedef struct CMModelKnownPropscore {
     vector *y;  // outcome variable
     vector_short *d;  // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise
     vector *propscore;  // vector of propensity score values
-    char *modeltype;    // propensity score model type
     double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
     double beta;    // negative exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
     double alpha;   // negative exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
     double kappa_a; // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
     double kappa_gamma; // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
     // Following fields are for internal use. Any user-provided values will be overwritten.
+    char *_modeltype;    // propensity score model type
     matrix *_x;  // covariate matrix. Optional; supplied internally
     int _modeltype_index;  // index of propensity score model type. Optional; supplied internally
     vector *_singleindex_score;  // single-index x*theta. Optional; supplied internally.
