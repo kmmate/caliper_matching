@@ -156,6 +156,7 @@ int main(int argc, char *argv[]){
     // Estimation
     // common settings
     double delta = 0.0; // caliper. Set to 0.0 for data-driven default choice (recommanded).
+    int estimate_variance = 1;
     double beta = 0.0;  // power of n in bandwidth of variance estimation; if 0, default will be used
     double alpha = 0.0; // power of n in truncation sequence in variance estimation; if 0, default will be used
     double kappa_gamma = 0.0; // scale of bandwidth of variance estimation; if 0, default will be used
@@ -165,6 +166,7 @@ int main(int argc, char *argv[]){
     // -- Case-KnownPS
     CMModelKnownPropscore *cm_model_known_propscore = malloc(sizeof(CMModelKnownPropscore)); // Case-KnownPS
     cm_model_known_propscore->delta = delta;
+    cm_model_known_propscore->estimate_variance = estimate_variance;
     cm_model_known_propscore->beta = beta;
     cm_model_known_propscore->alpha = alpha;
     cm_model_known_propscore->kappa_gamma = kappa_gamma;
@@ -215,6 +217,7 @@ int main(int argc, char *argv[]){
     CMModel *cm_model = malloc(sizeof(CMModel));
     cm_model->delta = delta;
     cm_model->modeltype = modeltype;
+    cm_model->estimate_variance = estimate_variance;
     cm_model->beta = beta;
     cm_model->alpha = alpha;
     cm_model->kappa_gamma = kappa_gamma;

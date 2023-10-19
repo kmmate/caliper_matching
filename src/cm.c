@@ -19,6 +19,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "cm.h"
+#include <stdlib.h>
 
 //////////////////      Propensity score utilities
 
@@ -3676,6 +3677,18 @@ void *cm_variance_estimator_thread(void *thread_arguments){
 
 // Estimates asymptotic variance variance of matching estimator
 void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
+    // if variance is not to be estimated, halt and return zero
+    if (!(cm_model->estimate_variance)){
+        results->var_hat_ate = 0.0;
+        results->var_hat_att = 0.0;
+        results->var_hat_component_tau_ate = 0.0;
+        results->var_hat_component_tau_att = 0.0;
+        results->var_hat_component_sigmapi_ate = 0.0;
+        results->var_hat_component_sigmapi_att = 0.0;
+        results->var_hat_component_estpi_ate = 0.0;
+        results->var_hat_component_estpi_att = 0.0;
+        exit(EXIT_SUCCESS);
+    }
     size_t n = cm_model->d->size;
     size_t k = cm_model->_called_internally ? cm_model->_x->size2 : 0;
     double var_tau, var_tau_treated, var_sigmapi, var_sigmapi_treated;
@@ -4176,6 +4189,8 @@ CMResults *cm_cm(CMModel *cm_model){
     cm_known->n = cm_model->n;
     cm_known->y = cm_model->y;
     cm_known->d = cm_model->d;
+    cm_known->delta = cm_model->delta;
+    cm_known->estimate_variance = cm_model->estimate_variance;
     cm_known->alpha = cm_model->alpha;
     cm_known->beta = cm_model->beta;
     cm_known->kappa_a = cm_model->kappa_a;
@@ -4190,7 +4205,6 @@ CMResults *cm_cm(CMModel *cm_model){
     cm_known->_pscore_sortindex = cm_model->_pscore_sortindex;
     cm_known->_called_internally = 1; // indicates that `cm_cm_known_propscore` is called by this function; used for variance estimation.
     cm_known->_isinstantiated = 1;  // CMModelKnownPropscore is instantiated when called by this function.
-    cm_known->delta = cm_model->delta;
     CMResults *results = cm_cm_known_propscore(cm_known);
     // for (int i=0; i<y->size; i++){
     //     printf("propscore[%d] = %f\n", i, vector_get(propscore, i));

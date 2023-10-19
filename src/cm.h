@@ -50,6 +50,7 @@ typedef struct CMResults {
     char *modeltype; // propensity score modeltype
     vector *theta_hat;  // propensity score (estimated) parameter
     double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
+    int estimate_variance; // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates aren not required.
     // fields related to nonparametric variance estimation
     double a_n; // value of truncation sequence in nonparametric variance estimation. Equal to `kappa_a` * `n` ^ `alpha`.
     double gamma_n; // value of bandwidth in nonparametric variance estimation. Equal to `kappa_gamma` * `n` ^ `beta`.
@@ -73,6 +74,7 @@ typedef struct CMModel {
     char *modeltype;    // propensity score model type
     vector *theta;  // propensity score model parameter, of length  (number of columns in `x`)+1
     double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
+    int estimate_variance; // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates aren not required.
     double beta;    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
     double alpha;   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
     double kappa_a; // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
@@ -93,6 +95,7 @@ typedef struct CMModelKnownPropscore {
     vector_short *d;  // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise
     vector *propscore;  // vector of propensity score values
     double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
+    int estimate_variance; // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates aren not required.
     double beta;    // negative exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
     double alpha;   // negative exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
     double kappa_a; // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
