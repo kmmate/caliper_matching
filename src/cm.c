@@ -19,7 +19,6 @@
 //////////////////////////////////////////////////////////////////////////
 
 #include "cm.h"
-#include <stdlib.h>
 
 //////////////////      Propensity score utilities
 
@@ -2055,8 +2054,8 @@ void cm_matches(CMModelKnownPropscore *cm_model, CMResults *results){
     vector_int *matches = vector_int_calloc(n);
     // to hold indices of matches for every unit
     dynamicarray_int **match_indices = malloc(n * sizeof(dynamicarray_int));
-    // sort propensity scores if not called internally
-    size_t *pscore_sortindex = cm_model->_called_internally ? cm_model->_pscore_sortindex : vector_sort_index(cm_model->propscore);
+        // sort propensity scores (even if called internally just in case)
+    size_t *pscore_sortindex = vector_sort_index(cm_model->propscore);
     // traverse neighbourhood of propscores
     if (NUM_THREADS > 1){ // multithreaded version
         CMThreadArgumentsMatches thread_args[NUM_THREADS];
@@ -4115,6 +4114,7 @@ CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cm_model){
     }
     CMResults *results = malloc(sizeof(CMResults));
     results->delta = cm_model->delta;  // write caliper to results too
+    results->estimate_variance = cm_model->estimate_variance;
     // estimates
     cm_matches(cm_model, results);
     // some sanity checks

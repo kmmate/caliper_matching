@@ -40,17 +40,16 @@ typedef struct CMResults {
     double var_hat_component_tau_att;  // estimated V_tau
     double var_hat_component_sigmapi_ate;  // estimated V_sigmapi
     double var_hat_component_sigmapi_att;  // estimated V_sigmapi
-    double var_hat_component_estpi_ate;  // estimated variance component deriving from the estimation of prepensity score
-    double var_hat_component_estpi_att;  // estimated variance component deriving from the estimation of prepensity score
+    double var_hat_component_estpi_ate;  // estimated variance component deriving from the estimation of propensity score
+    double var_hat_component_estpi_att;  // estimated variance component deriving from the estimation of propensity score
     dynamicarray_int **match_indices; // match_indices[i] is a dynamicarray_int holding the indices of `i`s matches
     vector_int *number_of_matches;  // row sums of matchmatrix
-    vector *w;
     // inputs
     size_t n;
     char *modeltype; // propensity score modeltype
     vector *theta_hat;  // propensity score (estimated) parameter
-    double delta; // caliper. If zero is passed, then the default data-driven value is used (recommanded). If a positive value is passed, that is used instead.
-    int estimate_variance; // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates aren not required.
+    double delta; // caliper that is actually used. If zero was passed, then it is equal to the default data-driven value. If a positive value was passed, then it is equal to that instead.
+    int estimate_variance; // Whether variance estimation was performed (`estimate_variance`), or not (`!estimate_variance`).
     // fields related to nonparametric variance estimation
     double a_n; // value of truncation sequence in nonparametric variance estimation. Equal to `kappa_a` * `n` ^ `alpha`.
     double gamma_n; // value of bandwidth in nonparametric variance estimation. Equal to `kappa_gamma` * `n` ^ `beta`.
