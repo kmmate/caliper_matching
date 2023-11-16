@@ -3521,7 +3521,7 @@ void *cm_variance_estimator_thread(void *thread_arguments){
         npower_gamma = thread_args->cm_model->beta;
     }
     if (thread_args->cm_model->kappa_gamma == 0.0){  //if zero scale is supplied, use default value
-        kappa_gamma = 0.5; // default value
+        kappa_gamma = 0.2; // default value
     } else {
         kappa_gamma = thread_args->cm_model->kappa_gamma;
     }
@@ -4097,11 +4097,18 @@ int cm_initialise_known_propscore(CMModelKnownPropscore *cm_model){
     cm_model->_pscore_sortindex = pscore_sortindex;
     cm_model->delta = delta;
     // instantiation successfull
-    cm_model->_called_internally = 0;
+    cm_model->_called_internally = 0; // initialisation `cm_initialise_known_propscore` is done by user call, not internal
     cm_model->_isinstantiated = 1;
     return 0;
 }
 
+/*
+The main function for ATE, ATT estimators for when the propensity score is known.
+It also estimates the asymptotic variances of the ATE and ATT estimators if so requested.
+
+To be called both by the user and internally. 
+When called internally it is invoked by `cm_cm` after `cm_cm` computes the estimated propensity scores. 
+*/
 CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cm_model){
     // validate inputs
     if (cm_cmmodelknownpropscore_check_values(cm_model, 0)){
@@ -4133,6 +4140,39 @@ CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cm_model){
     return results;
 }
 
+
+/*
+Safer version of `cm_cm_known_propscore`. 
+The difference: instead of taking a CMModelKnownPropscore as `cm_cm_known_propscore`, it constructs the model from the arguments.
+
+To be called by the user.
+*/
+CMResults *cm_cm_known_propscore_safe(vector *y, // outcome variables
+                                      vector_short *d, // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise   
+                                      vector *propscore, // vector of propensity score values
+                                      double delta, // caliper
+                                      int estimate_variance,  // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates are not required.
+                                      double beta,    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
+                                      double alpha,   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+                                      double kappa_a, // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+                                      double kappa_gamma // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
+){
+    // setup model
+    CMModelKnownPropscore *cm_model_known_propscore = (CMModelKnownPropscore *) malloc(sizeof(CMModelKnownPropscore));
+    cm_model_known_propscore->y = y;
+    cm_model_known_propscore->d = d;
+    cm_model_known_propscore->propscore = propscore;
+    cm_model_known_propscore->delta = delta;
+    cm_model_known_propscore->estimate_variance = estimate_variance;
+    cm_model_known_propscore->beta = beta;
+    cm_model_known_propscore->alpha = alpha;
+    cm_model_known_propscore->kappa_gamma = kappa_gamma;
+    cm_model_known_propscore->kappa_a = kappa_a;
+    // initilise model
+    cm_initialise_known_propscore(cm_model_known_propscore);
+    // call cm_cm_known_propscore
+    return cm_cm_known_propscore(cm_model_known_propscore);
+}
 
 // Compute singleindex-score, propensity score, and sets caliper.
 int cm_initialise(CMModel *cm_model){
@@ -4173,7 +4213,10 @@ int cm_initialise(CMModel *cm_model){
     return 0;
 }
 
-
+/*
+The main function for ATE, ATT estimators for when the propensity score is estimated.
+It also estimates the asymptotic variances of the ATE and ATT estimators if so requested.
+*/
 CMResults *cm_cm(CMModel *cm_model){
     // ensure model has been instantiated
     if (!cm_model->_isinstantiated){
@@ -4215,6 +4258,45 @@ CMResults *cm_cm(CMModel *cm_model){
     // }
     // printf("x_view[0] = %f, x[0,0] = %f\n", (&x_view.vector)->data[0], matrix_get(x, 0, 0));
     return results;
+}
+
+/*
+Safer version of `cm_cm`.
+The difference: instead of taking a CMModel as `cm_cm`, it constructs the model from the arguments.
+
+To be called by the user.
+*/
+CMResults *cm_cm_safe(vector *y, // outcome variable.
+                      vector_short *d, // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise.
+                      matrix *x, // `n`-by-`k` matrix of covariates.
+                      char *modeltype, // propensity score modeltype
+                      vector *theta, // the estimated propensity score parameter.
+                      double delta, // caliper.
+                      int estimate_variance,  // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates are not required.
+                      double beta,    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
+                      double alpha,   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+                      double kappa_a, // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+                      double kappa_gamma, // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
+                      double kappa_gamma_derivative // scale parameter of bandwidth in nonparametric variance estimation estimating derivatives w.r.t. theta. If zero is passed, a default value is used. 
+){
+    // setup model
+    CMModel *cm_model = malloc(sizeof(CMModel));
+    cm_model->y = y;
+    cm_model->d = d;
+    cm_model->x = x;
+    cm_model->delta = delta;
+    cm_model->modeltype = modeltype;
+    cm_model->theta = theta;
+    cm_model->estimate_variance = estimate_variance;
+    cm_model->beta = beta;
+    cm_model->alpha = alpha;
+    cm_model->kappa_gamma = kappa_gamma;
+    cm_model->kappa_a = kappa_a;
+    cm_model->kappa_gamma_derivative = kappa_gamma_derivative;
+    // initialise
+    cm_initialise(cm_model);
+    // call cm_cm
+    return cm_cm(cm_model);
 }
 
 

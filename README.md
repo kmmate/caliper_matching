@@ -49,6 +49,11 @@ Illustration of the main steps in the workflow. For a working example, refer to 
         printf("att_hat = %f.\n", results->att_hat);
 
 
+Alternatively, a safer version `cm_cm_safe()` replaces Steps 1-3 above and works by
+
+        cm_results = cm_cm_safe(y, d, x, modeltype, theta0, delta, estimate_variance, beta, alpha, kappa_a,  kappa_gamma, kappa_gamma_derivative);
+
+
 
 
 ## Notes
@@ -64,4 +69,7 @@ and then run the binary as
         $ ./example_simple
 .
 
-- For appropriate parallelisation, adjust the `NUM_THREADS` definition in `cm.h`.
+- For appropriate parallelisation, adjust the `NUM_THREADS` definition in `cm.h` aptly.
+
+- It is advised to look at the variance components in the returned results. 
+  Undesirably, negative values may occur; this may indicate too strong truncation at the bounderies. To resolve this, lower `kappa_a` to mitigate truncation. Alternatively, try adjusting `kappa_gamma` and/or `kappa_gamma_derivative`.

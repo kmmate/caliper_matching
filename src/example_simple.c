@@ -126,6 +126,7 @@ void compute_propscore(matrix *x, char *modeltype, vector *theta, vector *propsc
 // Illustrates basic usage of caliper matching library for two cases:
 //  -- Case-KnownPS: when the propensity score is known; and
 //  -- Case-EstimatedPS: when an estimated propensity score is supplied in the form of known model type (logit,probit) and estimated coefficients.
+// For each of the two cases two possible ways of estimation is presented. It is recommended, however, that users invoke the `_safe` versions of the function.
 int main(int argc, char *argv[]){
     // Test caliper matching functions
     test_cm();
@@ -179,9 +180,44 @@ int main(int argc, char *argv[]){
     cm_initialise_known_propscore(cm_model_known_propscore); // set caliper
     cm_results = cm_cm_known_propscore(cm_model_known_propscore); // estimation
     // print results
-    printf("==========================================\n");
+    printf("=========================================================\n");
     printf("Case-KnownPS: known propensity score\n");
-    printf("==========================================\n");
+    printf("=========================================================\n");
+    // ATE
+    printf("- ate_hat = %f (est. var. %f; s.e. %f)\n", cm_results->ate_hat, cm_results->var_hat_ate, sqrt(cm_results->var_hat_ate / n ));
+    printf("--- variance components: \n var_tau = %.4f (%.2f %%), \n var_sigmapi = %.4f (%.2f %%), \n var_estpi = %.4f (%.2f %%), \n total = %.4f (%.2f %%)\n",
+           cm_results->var_hat_component_tau_ate, 100 * cm_results->var_hat_component_tau_ate / cm_results->var_hat_ate, 
+           cm_results->var_hat_component_sigmapi_ate, 100 * cm_results->var_hat_component_sigmapi_ate / cm_results->var_hat_ate,
+           cm_results->var_hat_component_estpi_ate, 100 * cm_results->var_hat_component_estpi_ate / cm_results->var_hat_ate,
+           cm_results->var_hat_component_tau_ate + cm_results->var_hat_component_sigmapi_ate + cm_results->var_hat_component_estpi_ate, 100.0);
+    // ATT
+    printf("- att_hat = %f (est. var. %f; s.e. %f)\n", cm_results->att_hat, cm_results->var_hat_att, sqrt(cm_results->var_hat_att / n ));
+    printf("--- variance components: \n var_tau = %.4f (%.2f %%), \n var_sigmapi = %.4f (%.2f %%), \n var_estpi = %.4f (%.2f %%), \n total = %.4f (%.2f %%)\n",
+           cm_results->var_hat_component_tau_att, 100 * cm_results->var_hat_component_tau_att / cm_results->var_hat_att, 
+           cm_results->var_hat_component_sigmapi_att, 100 * cm_results->var_hat_component_sigmapi_att / cm_results->var_hat_att,
+           cm_results->var_hat_component_estpi_att, 100 * cm_results->var_hat_component_estpi_att / cm_results->var_hat_att,
+           cm_results->var_hat_component_tau_att + cm_results->var_hat_component_sigmapi_att + cm_results->var_hat_component_estpi_att, 100.0);
+    // variance
+    printf("Details of variance estimation:\n");
+    printf("--- propscore_min = %.10f\n", cm_results->propscore_min);
+    printf("--- propscore_max = %.10f\n", cm_results->propscore_max);
+    printf("--- truncation lower threshold = %.10f\n", cm_results->truncation_low);
+    printf("--- truncation higher threshold = %.10f\n", cm_results->truncation_high);
+    printf("--- truncation sequence a_n = %.35f\n", cm_results->a_n);
+    printf("--- truncation sequence negative-power alpha = %.10f\n", cm_results->alpha);
+    printf("--- truncation sequence scale kappa_a = %.10f\n", cm_results->kappa_a);
+    printf("--- bandwidth sequence gamma_n = %.35f\n", cm_results->gamma_n);
+    printf("--- bandwidth sequence for derivatives gamma_derivative_n = %.35f\n", cm_results->gamma_derivative_n);
+    printf("--- bandwidth sequence negative-power beta = %.35f\n", cm_results->beta);    
+    printf("--- bandwidth sequence scale kappa_gamma = %.35f\n", cm_results->kappa_gamma);
+    printf("--- bandwidth sequence scale for derivatives kappa_gamma_derivative = %.35f\n", cm_results->kappa_gamma_derivative);
+    
+    // -- Case-KnownPS (safe call)
+    cm_results = cm_cm_known_propscore_safe(y, d, propscore, delta, estimate_variance, beta, alpha, kappa_a, kappa_gamma);
+    // print results
+    printf("=========================================================\n");
+    printf("Case-KnownPS: known propensity score (safe call)\n");
+    printf("=========================================================\n");
     // ATE
     printf("- ate_hat = %f (est. var. %f; s.e. %f)\n", cm_results->ate_hat, cm_results->var_hat_ate, sqrt(cm_results->var_hat_ate / n ));
     printf("--- variance components: \n var_tau = %.4f (%.2f %%), \n var_sigmapi = %.4f (%.2f %%), \n var_estpi = %.4f (%.2f %%), \n total = %.4f (%.2f %%)\n",
@@ -211,7 +247,7 @@ int main(int argc, char *argv[]){
     printf("--- bandwidth sequence scale kappa_gamma = %.35f\n", cm_results->kappa_gamma);
     printf("--- bandwidth sequence scale for derivatives kappa_gamma_derivative = %.35f\n", cm_results->kappa_gamma_derivative);
 
-
+    
     // -- Case-EstimatedPS
     double kappa_gamma_derivative = 0.0; // scale of bandwidth of variance estimation for estimating derivatives w.r.t. propscore parameters; if 0, default will be used
     CMModel *cm_model = malloc(sizeof(CMModel));
@@ -230,9 +266,46 @@ int main(int argc, char *argv[]){
     cm_initialise(cm_model);  // compute propscore and set caliper
     cm_results = cm_cm(cm_model);  // estimation
     // print results
-    printf("==========================================\n");
+    printf("=========================================================\n");
     printf("Case-EstimtedPS: estimated propensity score\n");
-    printf("==========================================\n");
+    printf("=========================================================\n");
+    // ATE
+    printf("Estimates: \n");
+    printf("caliper delta = %f\n", cm_results->delta);
+    printf("- ate_hat = %f (est. var. %f; s.e. %f)\n", cm_results->ate_hat, cm_results->var_hat_ate, sqrt(cm_results->var_hat_ate / n ));
+    printf("--- variance components: \n var_tau = %.4f (%.2f %%), \n var_sigmapi = %.4f (%.2f %%), \n var_estpi = %.4f (%.2f %%), \n total = %.4f (%.2f %%).\n",
+           cm_results->var_hat_component_tau_ate, 100 * cm_results->var_hat_component_tau_ate / cm_results->var_hat_ate, 
+           cm_results->var_hat_component_sigmapi_ate, 100 * cm_results->var_hat_component_sigmapi_ate / cm_results->var_hat_ate,
+           cm_results->var_hat_component_estpi_ate, 100 * cm_results->var_hat_component_estpi_ate / cm_results->var_hat_ate,
+           cm_results->var_hat_component_tau_ate + cm_results->var_hat_component_sigmapi_ate + cm_results->var_hat_component_estpi_ate, 100.0);
+    // ATT
+    printf("- att_hat = %f (est. var. %f; s.e. %f)\n", cm_results->att_hat, cm_results->var_hat_att, sqrt(cm_results->var_hat_att / n ));
+    printf("--- variance components: \n var_tau = %.4f (%.2f %%), \n var_sigmapi = %.4f (%.2f %%), \n var_estpi = %.4f (%.2f %%), \n total = %.4f (%.2f %%)\n",
+           cm_results->var_hat_component_tau_att, 100 * cm_results->var_hat_component_tau_att / cm_results->var_hat_att, 
+           cm_results->var_hat_component_sigmapi_att, 100 * cm_results->var_hat_component_sigmapi_att / cm_results->var_hat_att,
+           cm_results->var_hat_component_estpi_att, 100 * cm_results->var_hat_component_estpi_att / cm_results->var_hat_att,
+           cm_results->var_hat_component_tau_att + cm_results->var_hat_component_sigmapi_att + cm_results->var_hat_component_estpi_att, 100.0);
+    // variance
+    printf("Details of variance estimation:\n");
+    printf("--- propscore_min = %.10f\n", cm_results->propscore_min);
+    printf("--- propscore_max = %.10f\n", cm_results->propscore_max);
+    printf("--- truncation lower threshold = %.10f\n", cm_results->truncation_low);
+    printf("--- truncation higher threshold = %.10f\n", cm_results->truncation_high);
+    printf("--- truncation sequence a_n = %.35f\n", cm_results->a_n);
+    printf("--- truncation sequence negative-power alpha = %.10f\n", cm_results->alpha);
+    printf("--- truncation sequence scale kappa_a = %.10f\n", cm_results->kappa_a);
+    printf("--- bandwidth sequence gamma_n = %.35f\n", cm_results->gamma_n);
+    printf("--- bandwidth sequence for derivatives gamma_derivative_n = %.35f\n", cm_results->gamma_derivative_n);
+    printf("--- bandwidth sequence negative-power beta = %.35f\n", cm_results->beta);    
+    printf("--- bandwidth sequence scale kappa_gamma = %.35f\n", cm_results->kappa_gamma);
+    printf("--- bandwidth sequence scale for derivatives kappa_gamma_derivative = %.35f\n", cm_results->kappa_gamma_derivative);
+    
+    // -- Case-EstimatedPS (safe call)
+    cm_results = cm_cm_safe(y, d, x, modeltype, theta0, delta, estimate_variance, beta, alpha, kappa_a, kappa_gamma, kappa_gamma_derivative);  // estimation
+    // print results
+    printf("=========================================================\n");
+    printf("Case-EstimtedPS: estimated propensity score (safe call)\n");
+    printf("=========================================================\n");
     // ATE
     printf("Estimates: \n");
     printf("caliper delta = %f\n", cm_results->delta);

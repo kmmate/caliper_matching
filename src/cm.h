@@ -114,8 +114,31 @@ typedef struct CMModelKnownPropscore {
 // functions
 int cm_initialise(CMModel *cmmodel);
 CMResults *cm_cm(CMModel *cmmodel);
+CMResults *cm_cm_safe(vector *y, // outcome variable.
+                      vector_short *d, // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise.
+                      matrix *x, // `n`-by-`k` matrix of covariates.
+                      char *modeltype, // propensity score modeltype
+                      vector *theta, // the estimated propensity score parameter.
+                      double delta, // caliper.
+                      int estimate_variance,  // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates are not required.
+                      double beta,    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
+                      double alpha,   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+                      double kappa_a, // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+                      double kappa_gamma, // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
+                      double kappa_gamma_derivative // scale parameter of bandwidth in nonparametric variance estimation estimating derivatives w.r.t. theta. If zero is passed, a default value is used. 
+);
 int cm_initialise_known_propscore(CMModelKnownPropscore *cmmodel);
 CMResults *cm_cm_known_propscore(CMModelKnownPropscore *cmmodel);
+CMResults *cm_cm_known_propscore_safe(vector *y, // outcome variables
+                                      vector_short *d, // treatment indicator: an entry `i` is one if unit `i` is treated, zero otherwise   
+                                      vector *propscore, // vector of propensity score values
+                                      double delta, // caliper
+                                      int estimate_variance,  // If zero is passed, the variances are not estimated, but set to zero automatically. This gains a speed-up when variance estimates are not required.
+                                      double beta,    // negative-exponent of bandwidth in nonparametric variance estimation. If zero is passed, a dafault value is used.
+                                      double alpha,   // negative-exponent of truncation sequence in nonparemetric variance estimation. If zero is passed, a default value is used.
+                                      double kappa_a, // scale parameter of truncation sequence in nonparametric variance estimation. If zero is passed, a default value is used.
+                                      double kappa_gamma // scale parameter of bandwidth in nonparametric variance estimation. If zero is passed, a default value is used. 
+);
 
 
 // tests
