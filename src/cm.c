@@ -3675,7 +3675,7 @@ void *cm_variance_estimator_thread(void *thread_arguments){
 }
 
 // Estimates asymptotic variance variance of matching estimator
-void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
+int cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
     // if variance is not to be estimated, halt and return zero
     if (!(cm_model->estimate_variance)){
         results->var_hat_ate = 0.0;
@@ -3686,7 +3686,7 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
         results->var_hat_component_sigmapi_att = 0.0;
         results->var_hat_component_estpi_ate = 0.0;
         results->var_hat_component_estpi_att = 0.0;
-        exit(EXIT_SUCCESS);
+        return 0;
     }
     size_t n = cm_model->d->size;
     size_t k = cm_model->_called_internally ? cm_model->_x->size2 : 0;
@@ -3805,6 +3805,7 @@ void cm_variance_estimator(CMModelKnownPropscore *cm_model, CMResults *results){
     results->var_hat_component_sigmapi_att = var_sigmapi_treated;
     results->var_hat_component_estpi_ate = var_estpi;
     results->var_hat_component_estpi_att = var_estpi_treated;
+    return 0;
 }
 
 typedef struct CMThreadArgumentsMaxmin {
@@ -4171,7 +4172,9 @@ CMResults *cm_cm_known_propscore_safe(vector *y, // outcome variables
     // initilise model
     cm_initialise_known_propscore(cm_model_known_propscore);
     // call cm_cm_known_propscore
-    return cm_cm_known_propscore(cm_model_known_propscore);
+    CMResults *results = cm_cm_known_propscore(cm_model_known_propscore);
+    printf("fpihjotgirjp");
+    return results;
 }
 
 // Compute singleindex-score, propensity score, and sets caliper.

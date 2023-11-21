@@ -4,3 +4,5 @@ src/.DS_Store
 example
 example_simple
 example_simulation
+simulation_propscore.c
+simulation_propscore
